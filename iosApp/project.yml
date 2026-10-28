@@ -1,0 +1,32 @@
+# Konfigurace XcodeGen pro projekt PdfStudio (cz.mares.pdfstudio)
+name: iosApp
+options:
+  bundleIdPrefix: cz.mares.pdfstudio
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: iosApp
+    settings:
+      base:
+        PRODUCT_NAME: PdfStudio
+        PRODUCT_BUNDLE_IDENTIFIER: cz.mares.pdfstudio
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: iosApp/Info.plist
+        SWIFT_ENABLE_EXPLICIT_MODULES: NO
+        FRAMEWORK_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(SRCROOT)/../composeApp/build/bin/iosArm64/releaseFramework"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-ObjC"
+          - "-framework"
+          - "ComposeApp"
+          - "-framework"
+          - "PDFKit"
+        ENABLE_BITCODE: NO
