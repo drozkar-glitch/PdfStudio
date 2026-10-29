@@ -1,8 +1,9 @@
+// Konfigurace repozitaru a modulu pro projekt PdfStudio (cz.mares.pdfstudio)
 pluginManagement {
     repositories {
         google()
-        mavenCentral()
         gradlePluginPortal()
+        mavenCentral()
     }
 }
 

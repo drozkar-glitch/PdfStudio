@@ -3,7 +3,7 @@ import SwiftUI
 import PDFKit
 import ComposeApp
 
-// SwiftUI obalka pro multiplatformni rozhrani PdfStudio
+// Hlavni SwiftUI pohled pro PdfStudio (cz.mares.pdfstudio)
 struct ComposeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         MainViewControllerKt.MainViewController()

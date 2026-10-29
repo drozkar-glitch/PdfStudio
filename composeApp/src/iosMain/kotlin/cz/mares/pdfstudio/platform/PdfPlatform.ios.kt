@@ -74,7 +74,7 @@ private fun NSData.toByteArray(): ByteArray {
 private fun colorFromArgb(argb: Int, alphaMultiplier: Double = 1.0): UIColor {
     val a = ((argb ushr 24) and 0xFF) / 255.0
     val r = ((argb ushr 16) and 0xFF) / 255.0
-    val g = ((argb ushr 8) and 0xFF) / 0xFF.toDouble()
+    val g = ((argb ushr 8) and 0xFF) / 255.0
     val b = (argb and 0xFF) / 255.0
     return UIColor.colorWithRed(r, green = g, blue = b, alpha = a * alphaMultiplier)
 }

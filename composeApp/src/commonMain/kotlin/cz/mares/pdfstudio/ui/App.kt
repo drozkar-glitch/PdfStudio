@@ -404,9 +404,7 @@ fun App() {
                                     ) {
                                         Icon(Icons.Default.Undo, contentDescription = "Krok zpět")
                                     }
-                                    IconButton(
-                                        onClick = { stateHolder.clearPage() },
-                                    ) {
+                                    IconButton(onClick = { stateHolder.clearPage() }) {
                                         Icon(Icons.Default.ClearAll, contentDescription = "Vymazat úpravy strany")
                                     }
                                     IconButton(onClick = { isBottomBarVisible = false }) {

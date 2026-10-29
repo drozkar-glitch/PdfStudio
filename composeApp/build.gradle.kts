@@ -1,3 +1,4 @@
+// Konfigurace modulu composeApp pro PdfStudio (Android SDK 36 + iOS + R8)
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.FileOutputStream
@@ -12,27 +13,27 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// Automaticke vycisteni cizich slozek (napr. cz/taximares) a starych kolidujicich souboru pred kompilaci
-listOf("commonMain", "androidMain", "iosMain").forEach { sourceSet ->
-    val kotlinDir = project.file("src/$sourceSet/kotlin")
-    if (kotlinDir.exists()) {
-        kotlinDir.listFiles()?.forEach { topDir ->
-            if (topDir.name != "cz") {
-                topDir.deleteRecursively()
+// Automaticka kontrola a odstraneni cizich slozek pred sestavenim projektu PdfStudio
+listOf("commonMain", "androidMain", "iosMain").forEach { srcName ->
+    val baseKotlinDir = project.file("src/$srcName/kotlin")
+    if (baseKotlinDir.exists()) {
+        baseKotlinDir.listFiles()?.forEach { rootPkg ->
+            if (rootPkg.name != "cz") {
+                rootPkg.deleteRecursively()
             }
         }
-        val czDir = File(kotlinDir, "cz")
-        if (czDir.exists()) {
-            czDir.listFiles()?.forEach { secondDir ->
-                if (secondDir.name != "mares") {
-                    secondDir.deleteRecursively()
+        val czFolder = File(baseKotlinDir, "cz")
+        if (czFolder.exists()) {
+            czFolder.listFiles()?.forEach { subPkg ->
+                if (subPkg.name != "mares") {
+                    subPkg.deleteRecursively()
                 }
             }
-            val maresDir = File(czDir, "mares")
-            if (maresDir.exists()) {
-                maresDir.listFiles()?.forEach { appDir ->
-                    if (appDir.name != "pdfstudio") {
-                        appDir.deleteRecursively()
+            val maresFolder = File(czFolder, "mares")
+            if (maresFolder.exists()) {
+                maresFolder.listFiles()?.forEach { projectPkg ->
+                    if (projectPkg.name != "pdfstudio") {
+                        projectPkg.deleteRecursively()
                     }
                 }
             }
@@ -47,10 +48,10 @@ listOf(
     "src/androidMain/kotlin/cz/mares/pdfstudio/platform/PlatformPdfBridge.kt",
     "src/iosMain/kotlin/cz/mares/pdfstudio/platform/PlatformPdfBridge.ios.kt",
     "src/iosMain/kotlin/cz/mares/pdfstudio/platform/PlatformPdfBridge.kt"
-).forEach { oldPath ->
-    val oldFile = project.file(oldPath)
-    if (oldFile.exists()) {
-        oldFile.delete()
+).forEach { legacyFileRelPath ->
+    val legacyFile = project.file(legacyFileRelPath)
+    if (legacyFile.exists()) {
+        legacyFile.delete()
     }
 }
 
@@ -67,8 +68,8 @@ kotlin {
         iosX64(),
         iosArm64(),
         iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
+    ).forEach { targetIos ->
+        targetIos.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true
             freeCompilerArgs += listOf("-Xbinary=bundleId=cz.mares.pdfstudio")
@@ -91,7 +92,10 @@ kotlin {
     }
 }
 
-val ciBuildNumber = System.getenv("PROJECT_BUILD_NUMBER")?.toIntOrNull() ?: 1
+val rawBuild = System.getenv("PROJECT_BUILD_NUMBER")?.toIntOrNull()
+    ?: System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+    ?: 1
+val ciBuildNumber = if (rawBuild < 100) rawBuild + 100 else rawBuild
 
 android {
     namespace = "cz.mares.pdfstudio"
@@ -119,7 +123,12 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             val keystorePath = System.getenv("CM_KEYSTORE_PATH")
             if (!keystorePath.isNullOrBlank()) {
                 signingConfig = signingConfigs.getByName("release")
@@ -143,77 +152,76 @@ android {
 
 val generateIosIcon = tasks.register("generateIosIcon") {
     doLast {
-        val iconDir = rootProject.file("iosApp/iosApp/Assets.xcassets/AppIcon.appiconset")
-        if (!iconDir.exists()) {
-            iconDir.mkdirs()
+        val assetDir = rootProject.file("iosApp/iosApp/Assets.xcassets/AppIcon.appiconset")
+        if (!assetDir.exists()) {
+            assetDir.mkdirs()
         }
-        val iconFile = File(iconDir, "app-icon-1024.png")
-        val width = 1024
-        val height = 1024
+        val outPngFile = File(assetDir, "app-icon-1024.png")
+        val iconSide = 1024
 
-        fun writePngChunk(out: DataOutputStream, chunkType: String, data: ByteArray) {
-            out.writeInt(data.size)
-            val typeBytes = chunkType.toByteArray(Charsets.US_ASCII)
-            out.write(typeBytes)
-            out.write(data)
-            val crc = CRC32()
-            crc.update(typeBytes)
-            crc.update(data)
-            out.writeInt(crc.value.toInt())
+        fun writeChunk(stream: DataOutputStream, typeTag: String, payload: ByteArray) {
+            stream.writeInt(payload.size)
+            val tagBytes = typeTag.toByteArray(Charsets.US_ASCII)
+            stream.write(tagBytes)
+            stream.write(payload)
+            val crcCalc = CRC32()
+            crcCalc.update(tagBytes)
+            crcCalc.update(payload)
+            stream.writeInt(crcCalc.value.toInt())
         }
 
-        FileOutputStream(iconFile).use { fos ->
-            val out = DataOutputStream(fos)
-            out.write(byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10))
+        FileOutputStream(outPngFile).use { fileOut ->
+            val dataOut = DataOutputStream(fileOut)
+            dataOut.write(byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10))
 
-            val ihdrBuf = ByteArrayOutputStream()
-            val ihdrOut = DataOutputStream(ihdrBuf)
-            ihdrOut.writeInt(width)
-            ihdrOut.writeInt(height)
-            ihdrOut.writeByte(8)
-            ihdrOut.writeByte(2)
-            ihdrOut.writeByte(0)
-            ihdrOut.writeByte(0)
-            ihdrOut.writeByte(0)
-            writePngChunk(out, "IHDR", ihdrBuf.toByteArray())
+            val headerBytes = ByteArrayOutputStream()
+            DataOutputStream(headerBytes).apply {
+                writeInt(iconSide)
+                writeInt(iconSide)
+                writeByte(8)
+                writeByte(2)
+                writeByte(0)
+                writeByte(0)
+                writeByte(0)
+            }
+            writeChunk(dataOut, "IHDR", headerBytes.toByteArray())
 
-            val idatBuf = ByteArrayOutputStream()
-            val deflater = Deflater(Deflater.BEST_SPEED)
-            DeflaterOutputStream(idatBuf, deflater).use { dos ->
-                val rowBuffer = ByteArray(1 + width * 3)
-                for (y in 0 until height) {
-                    rowBuffer[0] = 0
-                    var idx = 1
-                    for (x in 0 until width) {
-                        val inSheet = x in 220..804 && y in 140..884
-                        val inHeaderBand = x in 220..804 && y in 140..310
-                        val inTextLine1 = x in 300..720 && y in 420..465
-                        val inTextLine2 = x in 300..720 && y in 530..575
-                        val inTextLine3 = x in 300..580 && y in 640..685
+            val pixelBytes = ByteArrayOutputStream()
+            DeflaterOutputStream(pixelBytes, Deflater(Deflater.BEST_SPEED)).use { compressedOut ->
+                val scanline = ByteArray(1 + iconSide * 3)
+                for (py in 0 until iconSide) {
+                    scanline[0] = 0
+                    var pos = 1
+                    for (px in 0 until iconSide) {
+                        val insidePaper = px in 220..804 && py in 140..884
+                        val insideTopRed = px in 220..804 && py in 140..310
+                        val insideRowA = px in 300..720 && py in 420..465
+                        val insideRowB = px in 300..720 && py in 530..575
+                        val insideRowC = px in 300..580 && py in 640..685
 
-                        val r: Int
-                        val g: Int
-                        val b: Int
+                        val redVal: Int
+                        val greenVal: Int
+                        val blueVal: Int
 
-                        if (inHeaderBand) {
-                            r = 211; g = 47; b = 47
-                        } else if (inTextLine1 || inTextLine2 || inTextLine3) {
-                            r = 30; g = 64; b = 175
-                        } else if (inSheet) {
-                            r = 255; g = 255; b = 255
+                        if (insideTopRed) {
+                            redVal = 211; greenVal = 47; blueVal = 47
+                        } else if (insideRowA || insideRowB || insideRowC) {
+                            redVal = 30; greenVal = 64; blueVal = 175
+                        } else if (insidePaper) {
+                            redVal = 255; greenVal = 255; blueVal = 255
                         } else {
-                            r = 20; g = 50; b = 140
+                            redVal = 20; greenVal = 50; blueVal = 140
                         }
 
-                        rowBuffer[idx++] = r.toByte()
-                        rowBuffer[idx++] = g.toByte()
-                        rowBuffer[idx++] = b.toByte()
+                        scanline[pos++] = redVal.toByte()
+                        scanline[pos++] = greenVal.toByte()
+                        scanline[pos++] = blueVal.toByte()
                     }
-                    dos.write(rowBuffer)
+                    compressedOut.write(scanline)
                 }
             }
-            writePngChunk(out, "IDAT", idatBuf.toByteArray())
-            writePngChunk(out, "IEND", ByteArray(0))
+            writeChunk(dataOut, "IDAT", pixelBytes.toByteArray())
+            writeChunk(dataOut, "IEND", ByteArray(0))
         }
     }
 }
